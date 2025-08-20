@@ -1,6 +1,8 @@
 #include "protocol_interface.h"
 #include "protocol_engine.hpp"
 
+std::array<uint32_t(*)(const uint8_t* const, int32_t), ProcessList::ALL_PROECESS> ProcessMap{nullptr};
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -10,7 +12,8 @@ void protocol_init(void (*callback)(const void*, uint32_t)) {
     // 服务端处理回调示例
     Protocol::ProtocolEngine::instance().set_server_handler(
         [](const std::vector<uint8_t>& payload, uint16_t frame_id) -> std::vector<uint8_t> {
-            return payload;
+            auto ret = Protocol::ProtocolEngine::instance().call_process(payload);
+            return {};
         }
     );
 
@@ -40,15 +43,13 @@ void protocol_send_response(const uint8_t* data, size_t len) {
     Protocol::ProtocolEngine::instance().send_raw_frame(frame);
 }
 
-#ifdef __cplusplus
-}
-#endif
-
-std::array<uint32_t(*)(const uint8_t* const, int32_t), ProcessList::ALL_PROECESS> ProcessMap{nullptr};
-
 void register_function(enum ProcessList process, uint32_t (*handler)(const uint8_t* const payload, int32_t payload_size)) {
     ProcessMap.at(process) = handler;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 uint32_t Protocol::ProtocolEngine::call_process(const std::vector<uint8_t>& payload) {
     // first byte as process id.

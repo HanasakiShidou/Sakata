@@ -180,91 +180,20 @@ namespace Protocol {
         void set_client_handler(FrameHandler handler) { client_handler = handler; }
 
         using SendDataHandler = std::function<void(const std::vector<uint8_t>&, uint16_t)>;
-        void set_send_callback(SendDataHandler handler) { on_cdc_send = handler; }
+        void set_send_callback(SendDataHandler handler) { on_data_send = handler; }
 
         // 发送原始帧
         void send_raw_frame(const std::vector<uint8_t>& frame) {
-            if (on_cdc_send) {
-                on_cdc_send(frame, 0);
+            if (on_data_send) {
+                on_data_send(frame, 0);
             }
         }
 
     private:
         ProtocolEngine() = default;
 
-        void try_parse_frames() {
-            while(true) {
-
-                LOG(
-                std::cout << "rx buffer:" << std::hex;
-                for (auto ch: rx_buffer) {
-                    std::cout << " " << static_cast<int>(ch);
-                }
-                std::cout << std::dec <<std::endl;
-                )
-
-                auto start = rx_buffer.begin();
-                for (; start != rx_buffer.end(); start++) {
-                    if (*start == START_FLAG)
-                        break;
-                }
-                if(start == rx_buffer.end()) {
-                    LOG(std::cout << "no start flag, flush all." << std::endl;)
-                    rx_buffer.clear();
-                    break;
-                }
-
-                auto end = rx_buffer.end();
-                for (; end != start; end--) {
-                    if (*end == END_FLAG)
-                        break;
-                }
-                if(end <= start) {
-                    rx_buffer.erase(rx_buffer.begin(), start);
-                    LOG(std::cout << "parse failed, flushing bytes before start flag." << std::endl;)
-                    break;
-                }
-
-                LOG(std::cout << "Try parse " << rx_buffer.size() << " bytes " << std::endl;)
-
-                std::vector<uint8_t> frame(start, end+1);
-                rx_buffer.erase(rx_buffer.begin(), end+1);
-
-                dispatch_frame(frame);
-
-                if (rx_buffer.size() == 0) {
-                    break;
-                }
-            }
-        }
-
-        void dispatch_frame(const std::vector<uint8_t>& frame) {            
-            CmdType cmd;
-            uint16_t frameId;
-            std::vector<uint8_t> payload;
-            if (parseFrame(frame, cmd, frameId, payload)) {
-                LOG(std::cout << "Recv frame " << frame.size() << " bytes" << std::endl;)
-                LOG(std::cout << "Recv payload " << payload.size() << " bytes" << std::endl;)
-
-                switch (cmd)
-                {
-                case CmdType::REQUEST:
-                    if(payload.size() > 0 && server_handler) {
-                        auto response = server_handler(payload, payload.size());
-                        send_response(response, frameId);
-                    }
-                    break;
-                
-                default:
-                    break;
-                }
-            } else {
-                LOG(std::cout << "Recv frame " << frame.size() << "bytes" << std::endl;)
-                LOG(std::cout << "Recv payload " << payload.size() << "bytes" << std::endl;)
-                LOG(std::cout << "Parse failed " << std::endl;)
-                send_control_info(CmdType::RETRY, frameId);
-            }
-        }
+        void try_parse_frames();
+        void dispatch_frame(const std::vector<uint8_t>& frame);
 
         // 协议常量
         static constexpr uint8_t START_FLAG = 0xAA;
@@ -273,7 +202,7 @@ namespace Protocol {
         std::vector<uint8_t> rx_buffer;
         FrameHandler server_handler;
         FrameHandler client_handler;
-        SendDataHandler on_cdc_send;
+        SendDataHandler on_data_send;
     };
 
 } // namespace Protocol
