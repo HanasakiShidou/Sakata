@@ -1,7 +1,14 @@
 #include "protocol_interface.h"
+
+#include <cassert>
+
 #include "protocol_engine.hpp"
 
-std::array<uint32_t(*)(const uint8_t* const, int32_t), ProcessList::ALL_PROECESS> ProcessMap{nullptr};
+/*
+std::array<uint32_t (*)(const uint8_t* const, int32_t),
+           ProcessList::ALL_PROECESS>
+    ProcessMap{nullptr};
+*/
 
 #ifdef __cplusplus
 extern "C" {
@@ -11,39 +18,60 @@ extern "C" {
 void protocol_init(void (*callback)(const void*, uint32_t)) {
     // 服务端处理回调示例
     Protocol::ProtocolEngine::instance().set_server_handler(
-        [](const std::vector<uint8_t>& payload, uint16_t frame_id) -> std::vector<uint8_t> {
-            auto ret = Protocol::ProtocolEngine::instance().call_process(payload);
+        [](const std::vector<uint8_t>& payload,
+           uint16_t frame_id) -> std::vector<uint8_t> {
+            auto ret =
+                Protocol::ProtocolEngine::instance().call_process(payload);
             return {};
-        }
-    );
+        });
 
-    Protocol::ProtocolEngine::instance().set_send_callback([callback=callback](const std::vector<uint8_t>& bytes, uint16_t len) { if (callback) callback(bytes.data(), bytes.size());});
+    Protocol::ProtocolEngine::instance().set_send_callback(
+        [callback = callback](const std::vector<uint8_t>& bytes, uint16_t len) {
+            if (callback) callback(bytes.data(), bytes.size());
+        });
 }
-
 
 // 接收数据处理
 void protocol_on_rx_data(const uint8_t* data, uint32_t len) {
     Protocol::ProtocolEngine::instance().process_rx_data(data, len);
 }
 
-
 // 发送请求（客户端）
 void protocol_send_request(const uint8_t* data, uint32_t len) {
     std::vector<uint8_t> payload(data, data + len);
-    auto frame = Protocol::ProtocolEngine::buildFrame(Protocol::CmdType::REQUEST, Protocol::ProtocolEngine::instance().current_frame_id, payload);
-    //Protocol::ProtocolEngine::instance().send_raw_frame(frame);
+    auto frame = Protocol::ProtocolEngine::buildFrame(
+        Protocol::CmdType::REQUEST,
+        Protocol::ProtocolEngine::instance().current_frame_id, payload);
+    // Protocol::ProtocolEngine::instance().send_raw_frame(frame);
     protocol_on_rx_data(frame.data(), frame.size());
 }
 
+int call_function(struct Memory* income, struct Memory* outcome,
+                  int32_t func_id, bool wait) {
+    // read parameter
+    assert(income->ptr);
+    assert(income->len != 0);
+
+    if (wait) {
+        assert(outcome);
+        auto size = sizeof(uint64_t);
+        malloc(size);
+    }
+    return 0;
+}
 
 // 发送响应（服务端）
 void protocol_send_response(const uint8_t* data, size_t len) {
     std::vector<uint8_t> payload(data, data + len);
-    auto frame = Protocol::ProtocolEngine::buildFrame(Protocol::CmdType::RESPONSE, Protocol::ProtocolEngine::instance().current_frame_id, payload);
+    auto frame = Protocol::ProtocolEngine::buildFrame(
+        Protocol::CmdType::RESPONSE,
+        Protocol::ProtocolEngine::instance().current_frame_id, payload);
     Protocol::ProtocolEngine::instance().send_raw_frame(frame);
 }
 
-void register_function(enum ProcessList process, uint32_t (*handler)(const uint8_t* const payload, int32_t payload_size)) {
+void register_function(enum ProcessList process,
+                       uint32_t (*handler)(const uint8_t* const payload,
+                                           int32_t payload_size)) {
     ProcessMap.at(process) = handler;
 }
 
@@ -51,7 +79,8 @@ void register_function(enum ProcessList process, uint32_t (*handler)(const uint8
 }
 #endif
 
-uint32_t Protocol::ProtocolEngine::call_process(const std::vector<uint8_t>& payload) {
+uint32_t Protocol::ProtocolEngine::call_process(
+    const std::vector<uint8_t>& payload) {
     // first byte as process id.
     if (payload.size() > sizeof(uint8_t)) {
         uint8_t process_id = payload.front();

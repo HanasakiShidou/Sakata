@@ -39,6 +39,12 @@ namespace Protocol {
     };
 #pragma pack(pop)
 
+
+    class ProcessMap {
+        public:
+            int getProcessToken(const std::string index);
+            bool registerProcess(void(*callback)(struct Memory));
+
     class ProtocolEngine {
     public:
         using FrameHandler = std::function<const std::vector<uint8_t>(const std::vector<uint8_t>&, uint16_t)>;

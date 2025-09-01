@@ -1,21 +1,41 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
+
+// C level API for Sakata
+
+struct Memory{
+    void* ptr  = NULL;
+    size_t len = 0;
+};
+
+typedef void (*MemoryHandler) (const uint8_t *, int32_t);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// 初始化协议栈
+// Initalize a instance, returns a FD.
+int getInstance();
+
+// Register a peer connection.
+bool registerPeer(int fd, MemoryHandler on_rx_data, MemoryHandler* on_tx_data);
+
+// Init RX/TX function calls.
 void protocol_init(void (*callback)(const void*, uint32_t));
 
 // 接收数据处理入口（由CDC回调触发）
-void protocol_on_rx_data(const uint8_t* data, uint32_t len);
+void on_rx_data(const uint8_t* data, uint32_t len);
 
-    // 发送请求（客户端使用）
+void on_tx_data(const uint8_t* data, uint32_t len);
+
+// Function register, function calls, function return.
 void protocol_send_request(const uint8_t* data, uint32_t len);
 
-// 发送响应（服务端使用）
-//void protocol_send_response(const uint8_t* data, size_t len);
+// Synchronous/Asynchronous call function (returns token).
+int call_function(struct Memory* income, struct Memory* outcome, int32_t func_id, bool wait=true);
+
+uint64_t fast_call(uint64_t income, int32_t func_id, bool wait=true);
 
 // Function registration
 
