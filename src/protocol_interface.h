@@ -4,12 +4,15 @@
 
 // C level API for Sakata
 
-struct Memory{
+struct MemoryReference{
     void* ptr  = NULL;
     size_t len = 0;
+    bool managed = false;
 };
 
-typedef void (*MemoryHandler) (const uint8_t *, int32_t);
+typedef void (*MemoryHandler) (struct MemoryReference*);
+
+typedef void (*MemoryHandlerRx) (struct MemoryReference*, int instanceFd, int peerFd);
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,16 +21,11 @@ extern "C" {
 // Initalize a instance, returns a FD.
 int getInstance();
 
-// Register a peer connection.
-bool registerPeer(int fd, MemoryHandler on_rx_data, MemoryHandler* on_tx_data);
+// Register a peer fd.
+int registerPeer(int fd, MemoryHandler on_tx_data);
 
-// Init RX/TX function calls.
-void protocol_init(void (*callback)(const void*, uint32_t));
-
-// 接收数据处理入口（由CDC回调触发）
-void on_rx_data(const uint8_t* data, uint32_t len);
-
-void on_tx_data(const uint8_t* data, uint32_t len);
+// Checker if a funcuion exists on server
+int registerFunctionCall(const char* const functionDescriptor);
 
 // Function register, function calls, function return.
 void protocol_send_request(const uint8_t* data, uint32_t len);
