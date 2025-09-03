@@ -1,4 +1,5 @@
 #include <vector>
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -39,23 +40,20 @@ namespace Protocol {
     };
 #pragma pack(pop)
 
+    using MemoryReference = std::span<const uint8_t>;
+    using MemoryReferenceHandler = std::function<void(std::span<const uint8_t>)>;
 
     class ProcessMap {
         public:
-            int getProcessToken(const std::string index);
+            int getProcessDescriptor(const std::string index);
             bool registerProcess(void(*callback)(struct Memory));
+    };
 
     class ProtocolEngine {
     public:
         using FrameHandler = std::function<const std::vector<uint8_t>(const std::vector<uint8_t>&, uint16_t)>;
         
         uint16_t current_frame_id{0};
-
-        static ProtocolEngine inst;
-
-        static ProtocolEngine& instance() {
-            return inst;
-        }
 
         static uint32_t call_process(const std::vector<uint8_t>& payload);
         
@@ -179,25 +177,18 @@ namespace Protocol {
             send_raw_frame(buildFrame(cmd, frame_id, {}));
         }
 
-        // 设置服务端回调
-        void set_server_handler(FrameHandler handler) { server_handler = handler; }
-
-        // 设置客户端回调 
-        void set_client_handler(FrameHandler handler) { client_handler = handler; }
-
-        using SendDataHandler = std::function<void(const std::vector<uint8_t>&, uint16_t)>;
-        void set_send_callback(SendDataHandler handler) { on_data_send = handler; }
+        void set_send_callback(MemoryReferenceHandler handler) { on_data_send = handler; }
 
         // 发送原始帧
         void send_raw_frame(const std::vector<uint8_t>& frame) {
             if (on_data_send) {
-                on_data_send(frame, 0);
+                on_data_send(frame);
             }
         }
 
-    private:
         ProtocolEngine() = default;
 
+    private:
         void try_parse_frames();
         void dispatch_frame(const std::vector<uint8_t>& frame);
 
@@ -206,9 +197,7 @@ namespace Protocol {
         static constexpr uint8_t END_FLAG = 0x55;
 
         std::vector<uint8_t> rx_buffer;
-        FrameHandler server_handler;
-        FrameHandler client_handler;
-        SendDataHandler on_data_send;
+        MemoryReferenceHandler on_data_send;
     };
 
 } // namespace Protocol

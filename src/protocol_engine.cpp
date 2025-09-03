@@ -3,8 +3,6 @@
 // 协议字段定义
 namespace Protocol {
 
-    ProtocolEngine ProtocolEngine::inst;
-
     void ProtocolEngine::dispatch_frame(const std::vector<uint8_t>& frame) { 
         CmdType cmd;
         uint16_t frameId;
@@ -15,9 +13,9 @@ namespace Protocol {
 
             switch(cmd) {
                 case CmdType::REQUEST:
-                    if(payload.size() > 0 && server_handler) {
-                        auto response = server_handler(payload, payload.size());
-                        send_response(response, frameId);
+                    if(payload.size() > 0) {
+                        //auto response = server_handler(payload, payload.size());
+                        //send_response(response, frameId);
                     }
                     break;
                 case CmdType::RESPONSE:

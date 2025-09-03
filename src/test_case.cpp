@@ -29,14 +29,14 @@ uint64_t DUMMY_PROC(uint64_t val) {
     return val;
 }
 
-DEFINE_PROCESS_1PARAM(DUMMY_PROC, DUMMY, uint64_t)
+//DEFINE_PROCESS_1PARAM(DUMMY_PROC, DUMMY, uint64_t)
 
 int main() {
-    protocol_init(FAKE_RX_DATA);
-    REGISTER_PROCESS_1PARAM(DUMMY_PROC, DUMMY);
+    //protocol_init(FAKE_RX_DATA);
+    //REGISTER_PROCESS_1PARAM(DUMMY_PROC, DUMMY);
 
     uint64_t param = 1;
-    CALL_1PARAM(DUMMY, param);
+    //CALL_1PARAM(DUMMY, param);
  
     return 0;
 }

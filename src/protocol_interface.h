@@ -4,15 +4,14 @@
 
 // C level API for Sakata
 
-struct MemoryReference{
-    void* ptr  = NULL;
+struct CMemoryReference{
+    const void* ptr  = NULL;
     size_t len = 0;
-    bool managed = false;
 };
 
-typedef void (*MemoryHandler) (struct MemoryReference*);
+typedef void (*CMemoryHandler) (struct CMemoryReference);
 
-typedef void (*MemoryHandlerRx) (struct MemoryReference*, int instanceFd, int peerFd);
+typedef void (*CMemoryHandlerRx) (struct CMemoryReference*, int instanceFd, int peerFd);
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,28 +21,21 @@ extern "C" {
 int getInstance();
 
 // Register a peer fd.
-int registerPeer(int fd, MemoryHandler on_tx_data);
+int registerPeer(int fd, CMemoryHandler on_tx_data);
 
 // Checker if a funcuion exists on server
-int registerFunctionCall(const char* const functionDescriptor);
-
-// Function register, function calls, function return.
-void protocol_send_request(const uint8_t* data, uint32_t len);
+int registerFunction(const char* const functionDescriptor);
 
 // Synchronous/Asynchronous call function (returns token).
-int call_function(struct Memory* income, struct Memory* outcome, int32_t func_id, bool wait=true);
+int callFunction(struct CMemoryReference income, struct CMemoryReference* outcome, int32_t func_id, bool wait=true);
 
+// Get result by token.
+//int getResult(int token, struct CMemoryReference* outcome);
+
+// Synchronous call simple function (returns result).
 uint64_t fast_call(uint64_t income, int32_t func_id, bool wait=true);
 
-// Function registration
-
-enum ProcessList{
-    DUMMY,
-    ALL_PROECESS
-};
-
-void register_function(enum ProcessList process, uint32_t (*handler)(const uint8_t* const payload, int32_t payload_size));
-
+/*
 // PARAMS = int val, int val2
 #define UNPACK_PARAMS(type, var_name)                           \
     type var_name;                                              \
@@ -70,7 +62,7 @@ uint32_t TEMP_PROCESS_##FUNC_NAME(const uint8_t* const payload, int32_t payload_
     memcpy(&send_buff[offset], &PARAM1, sizeof(PARAM1)); \
     protocol_send_request(send_buff, 1 + sizeof(PARAM1)); \
 } while (0) \
-
+*/
 
 #ifdef __cplusplus
 }
