@@ -11,7 +11,7 @@ struct CMemoryReference{
 
 typedef void (*CMemoryHandler) (struct CMemoryReference);
 
-typedef void (*CMemoryHandlerRx) (struct CMemoryReference*, int instanceFd, int peerFd);
+typedef void (*CMemoryHandlerRx) (struct CMemoryReference*, int instanceFd, int PointFd);
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,8 +20,11 @@ extern "C" {
 // Initalize a instance, returns a FD.
 int getInstance();
 
-// Register a peer fd.
-int registerPeer(int fd, CMemoryHandler on_tx_data);
+// Register a Point fd.
+int registerPointToPoint(int fd, CMemoryHandler on_tx_data);
+
+// Call back when the p2p recives data;
+int onPointToPointRecive(int instance_fd, int ptp_fd, CMemoryReference memRef);
 
 // Checker if a funcuion exists on server
 int registerFunction(const char* const functionDescriptor);

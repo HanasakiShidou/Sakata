@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
 project(protocol_host_TC)
 set(CMAKE_CXX_STANDARD 20)
-#set(SRC_LIST main.cpp protocol_engine.cpp protocol_interface.cpp)
 set(SRC_LIST test_case.cpp protocol_engine.cpp protocol_interface.cpp)
 add_executable(protocol_host_test ${SRC_LIST})

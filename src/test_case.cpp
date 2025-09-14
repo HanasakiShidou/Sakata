@@ -1,5 +1,3 @@
-// test_serial.cpp
-#include "serial_port.hpp"
 #include <iostream>
 #include <iomanip>
 #include <vector>

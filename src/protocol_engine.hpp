@@ -8,10 +8,14 @@
 
 #define LOG_ENABLED 1
 
+#if LOG_ENABLED
 #define LOG(x) \
     if(LOG_ENABLED) { \
         x             \
     }
+#else
+#define LOG(x) ;
+#endif
 
 // 协议字段定义
 namespace Protocol {
@@ -49,6 +53,17 @@ namespace Protocol {
             bool registerProcess(void(*callback)(struct Memory));
     };
 
+    class PointToPointConnection {
+        public:
+            inline const bool isActive() { return active; }
+            void initailze(MemoryReferenceHandler handler) { on_send = handler; active = true; }
+            PointToPointConnection() = default;
+            PointToPointConnection(MemoryReferenceHandler handler):on_send(handler), active(true) {}
+        private:
+            bool active{false};
+            MemoryReferenceHandler on_send;
+    };
+
     class ProtocolEngine {
     public:
         using FrameHandler = std::function<const std::vector<uint8_t>(const std::vector<uint8_t>&, uint16_t)>;
@@ -56,16 +71,16 @@ namespace Protocol {
         uint16_t current_frame_id{0};
 
         static uint32_t call_process(const std::vector<uint8_t>& payload);
-        
-        // 接收数据入口
-        void process_rx_data(const uint8_t* data, size_t len) {
-            LOG(std::cout << "on data recv " << len << " bytes " << std::endl;)
-            if (len != 0) {
-                rx_buffer.insert(rx_buffer.end(), data, data + len);
-            }
-            try_parse_frames();
-            LOG(std::cout << "on data recv process end." << std::endl << std::endl;)
+
+        // Point-to-Point connections.
+        std::vector<PointToPointConnection> conntections;
+
+        int registerPointToPoint(MemoryReferenceHandler handler) {
+            conntections.push_back(PointToPointConnection(handler));
+            return conntections.size() - 1;
         }
+
+        int onPointToPointRecive(int ptp_fd, MemoryReference memRef);
 
         // 构建发送帧
         static std::vector<uint8_t> buildFrame(
@@ -176,8 +191,6 @@ namespace Protocol {
         void send_control_info(CmdType cmd, uint16_t frame_id) {
             send_raw_frame(buildFrame(cmd, frame_id, {}));
         }
-
-        void set_send_callback(MemoryReferenceHandler handler) { on_data_send = handler; }
 
         // 发送原始帧
         void send_raw_frame(const std::vector<uint8_t>& frame) {
