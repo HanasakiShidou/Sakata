@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(protocol_host_TC)
+project(sakata_test)
 set(CMAKE_CXX_STANDARD 20)
-set(SRC_LIST test_case.cpp protocol_engine.cpp protocol_interface.cpp)
-add_executable(protocol_host_test ${SRC_LIST})
+set(SRC_LIST main_test.cpp sakata.cpp)
+add_executable(sakata_test ${SRC_LIST})
