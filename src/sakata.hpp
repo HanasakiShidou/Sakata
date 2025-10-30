@@ -4,6 +4,7 @@
 #include <span>
 #include <functional>
 #include <unordered_map>
+#include <memory>
 
 namespace Sakata
 {
@@ -21,6 +22,11 @@ enum class Commands : uint8_t {
     RETRY,
     BUSY,
     FREE
+};
+
+//  Negative value are reserved.
+enum ReservedFunctionID : int32_t {
+    REQUEST_NODENAME = -1,
 };
 
 // Basic data structs & types.
@@ -55,36 +61,49 @@ struct PacketBody
 class Packet
 {
     private:
-    PacketHeader* header;
+    PacketHeader header;
     PacketBody body;
     bool valid{false};
+    // Nullptr if this packet does not have the ownership of the raw data.
+    std::unique_ptr<uint8_t> rawData{nullptr};
 
     public:
-    const PacketHeader& getHeader();
-    const PacketBody& getBody();
-    const bool isValid() {return valid;}
+    const PacketHeader& getHeader() { return header; }
+    const PacketBody& getBody() { return body; }
+    const bool isValid() { return valid; }
 
-    bool buildFromRawData(const MemoryReference& data);
-    Packet(const MemoryReference& data) {buildFromRawData(data);}
+    static Packet deSerialization(const MemoryReference& data);
+    const MemoryReference Serialization();
+    Packet(const MemoryReference& data) { deSerialization(data); }
     Packet() = default;
 };
 
-
+// Raw data transfer layer.
 class PointToPointConnection {
     public:
         inline const bool isActive() { return active; }
-        inline void initailze(MemoryReferenceHandler sendCallback, MemoryReferenceHandler receiveCallback) {
+        inline void initialize(MemoryReferenceHandler sendCallback, MemoryReferenceHandler receiveCallback) {
             if(sendCallback && receiveCallback) { onSend = sendCallback, onReceive = receiveCallback; active = true; } 
         }
+
         inline MemoryReferenceHandler getSendCallback() {
             return onSend ? onSend : nullptr;
         }
 
-        PointToPointConnection() = default;
+        inline MemoryReferenceHandler getReceiveCallback() {
+            return onReceive ? onReceive : nullptr;
+        }
+
+        bool Receive(MemoryReference rawData) { return onReceive ? onReceive(rawData) : false; }
+
+        // PointToPointConnection() = default;
+        PointToPointConnection(const PointToPointConnection&) = delete;
+        PointToPointConnection& operator=(const PointToPointConnection&) = delete;
+        PointToPointConnection(PointToPointConnection&&) = default;
         PointToPointConnection(MemoryReferenceHandler sendCallback, MemoryReferenceHandler receiveCallback) :
             onSend(sendCallback),
             onReceive(receiveCallback),
-            active(true) {}
+            active(sendCallback && receiveCallback) {}
     private:
         bool active{false};
         MemoryReferenceHandler onSend;
@@ -99,7 +118,15 @@ struct NodeInfo
 
 class RemoteNode : public NodeInfo
 {
+    private:
     PointToPointConnection connection;
+
+    public:
+    RemoteNode(PointToPointConnection&& connection_) : connection(std::move(connection_)){}
+    RemoteNode(const RemoteNode&) = delete;
+    RemoteNode& operator=(const RemoteNode&) = delete;
+    RemoteNode(RemoteNode&&) = default;
+    RemoteNode() = delete;
 };
 
 class SakataNode : public NodeInfo
