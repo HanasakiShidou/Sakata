@@ -3,6 +3,7 @@
 #include <string>
 #include <span>
 #include <functional>
+#include <unordered_map>
 
 namespace Sakata
 {
@@ -72,12 +73,22 @@ class Packet
 class PointToPointConnection {
     public:
         inline const bool isActive() { return active; }
-        inline void initailze(MemoryReferenceHandler handler) { if(handler) {on_send = handler; active = true;} }
+        inline void initailze(MemoryReferenceHandler sendCallback, MemoryReferenceHandler receiveCallback) {
+            if(sendCallback && receiveCallback) { onSend = sendCallback, onReceive = receiveCallback; active = true; } 
+        }
+        inline MemoryReferenceHandler getSendCallback() {
+            return onSend ? onSend : nullptr;
+        }
+
         PointToPointConnection() = default;
-        PointToPointConnection(MemoryReferenceHandler handler):on_send(handler), active(true) {}
+        PointToPointConnection(MemoryReferenceHandler sendCallback, MemoryReferenceHandler receiveCallback) :
+            onSend(sendCallback),
+            onReceive(receiveCallback),
+            active(true) {}
     private:
         bool active{false};
-        MemoryReferenceHandler on_send;
+        MemoryReferenceHandler onSend;
+        MemoryReferenceHandler onReceive;
 };
 
 
@@ -86,19 +97,19 @@ struct NodeInfo
     const std::string nodeName;
 };
 
-
-class SakataNode
+class RemoteNode : public NodeInfo
 {
-    // Node information
-    private:
-    struct NodeInfo {
-        const std::string nodeName;
-    }nodeinfo;
+    PointToPointConnection connection;
+};
 
+class SakataNode : public NodeInfo
+{
     // Peer control and APIs.
     private:
+    std::unordered_map<std::string, PointToPointConnection> nodeMap;
 
     public:
+    bool registerNodeMap(MemoryReferenceHandler handler);
 
     // Function management and APIs.
     private:
