@@ -32,49 +32,61 @@ enum ReservedFunctionID : int32_t {
 // Basic data structs & types.
 
 using FunctionID = int32_t;
-using MemoryReference = std::span<uint8_t>;
-using MemoryReferenceHandler = std::function<bool(MemoryReference)>;
+using RequestSequenceNumber = int32_t;
+using RawData = std::vector<uint8_t>;
+using RawDataHandler = std::function<bool(RawData)>;
 
-#pragma pack(push, 1)
+/*
+* PACKET STRUCTURE
+* [] -> Necessary fields.
+* <> -> Optional fields.
+*
+* Current packet structure:
+* [START 1byte] [COMMANDS 1btye] [SEQUENCE 2byte] [LENGTH 2byte]
+* <FUNCTION_ID 4byte>
+* <REQUEST_SEQ_NUM 4byte>
+* <FUNCTION_RESULT dynamic length>
+* <FUNCTION_PARAMETER dynamic length>
+* [END 1byte]
+*/
+
 struct PacketHeader {
     uint8_t    start;
     Commands   cmd;
-    int16_t    frameId;
+    int16_t    sequence;
     int16_t    dataLength;
 };
-#pragma pack(pop)
-
 
 // The length of data members is dynamic and needs to be manually initialized before use
 struct PacketBody
 {
+    // Optional fields
     // Function and parameters
     FunctionID functionId{-1};
-    MemoryReference functionParameter;
+    RequestSequenceNumber requestSN{0};
+    RawData functionParameter;
+    RawData functionResult;
     
-    uint8_t end;
     // XOR for whole packet, reserved now.
     //uint8_t checksum{0};   
+    uint8_t end;
 };
 
 
-class Packet
+class Packet : public PacketHeader, public PacketBody
 {
-    private:
-    PacketHeader header;
-    PacketBody body;
+    //private:
+    public:
     bool valid{false};
-    // Nullptr if this packet does not have the ownership of the raw data.
-    std::unique_ptr<uint8_t> rawData{nullptr};
 
     public:
-    const PacketHeader& getHeader() { return header; }
-    const PacketBody& getBody() { return body; }
+    const PacketHeader& getHeader() { return *this; }
+    const PacketBody& getBody() { return *this; }
     const bool isValid() { return valid; }
 
-    static Packet deSerialization(const MemoryReference& data);
-    const MemoryReference Serialization();
-    Packet(const MemoryReference& data) { deSerialization(data); }
+    static Packet deSerialize(const RawData& data);
+    const RawData serialize();
+    Packet(const RawData& data) { deSerialize(data); }
     Packet() = default;
 };
 
@@ -82,32 +94,32 @@ class Packet
 class PointToPointConnection {
     public:
         inline const bool isActive() { return active; }
-        inline void initialize(MemoryReferenceHandler sendCallback, MemoryReferenceHandler receiveCallback) {
+        inline void initialize(RawDataHandler sendCallback, RawDataHandler receiveCallback) {
             if(sendCallback && receiveCallback) { onSend = sendCallback, onReceive = receiveCallback; active = true; } 
         }
 
-        inline MemoryReferenceHandler getSendCallback() {
+        inline RawDataHandler getSendCallback() {
             return onSend ? onSend : nullptr;
         }
 
-        inline MemoryReferenceHandler getReceiveCallback() {
+        inline RawDataHandler getReceiveCallback() {
             return onReceive ? onReceive : nullptr;
         }
 
-        bool Receive(MemoryReference rawData) { return onReceive ? onReceive(rawData) : false; }
+        bool Receive(RawData rawData) { return onReceive ? onReceive(rawData) : false; }
 
         // PointToPointConnection() = default;
         PointToPointConnection(const PointToPointConnection&) = delete;
         PointToPointConnection& operator=(const PointToPointConnection&) = delete;
         PointToPointConnection(PointToPointConnection&&) = default;
-        PointToPointConnection(MemoryReferenceHandler sendCallback, MemoryReferenceHandler receiveCallback) :
+        PointToPointConnection(RawDataHandler sendCallback, RawDataHandler receiveCallback) :
             onSend(sendCallback),
             onReceive(receiveCallback),
             active(sendCallback && receiveCallback) {}
     private:
         bool active{false};
-        MemoryReferenceHandler onSend;
-        MemoryReferenceHandler onReceive;
+        RawDataHandler onSend;
+        RawDataHandler onReceive;
 };
 
 
@@ -129,6 +141,10 @@ class RemoteNode : public NodeInfo
     RemoteNode() = delete;
 };
 
+//RemoteNode initializeNode(PointToPointConnection connection) {
+//
+//}
+
 class SakataNode : public NodeInfo
 {
     // Peer control and APIs.
@@ -136,7 +152,7 @@ class SakataNode : public NodeInfo
     std::unordered_map<std::string, PointToPointConnection> nodeMap;
 
     public:
-    bool registerNodeMap(MemoryReferenceHandler handler);
+    bool registerNodeMap(RawDataHandler handler);
 
     // Function management and APIs.
     private:
