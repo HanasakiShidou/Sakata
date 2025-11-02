@@ -24,11 +24,6 @@ enum class Commands : uint8_t {
     FREE
 };
 
-//  Negative value are reserved.
-enum ReservedFunctionID : int32_t {
-    REQUEST_NODENAME = -1,
-};
-
 // Basic data structs & types.
 
 using FunctionID = int32_t;
@@ -75,7 +70,7 @@ struct PacketBody
 
 class Packet : public PacketHeader, public PacketBody
 {
-    //private:
+    //private: -> TODO: for test
     public:
     bool valid{false};
 
@@ -107,8 +102,9 @@ class PointToPointConnection {
         }
 
         bool Receive(RawData rawData) { return onReceive ? onReceive(rawData) : false; }
+        bool Send(RawData rawData) { return onSend ? onSend(rawData) : false; }
 
-        // PointToPointConnection() = default;
+        PointToPointConnection() = default; // TODO: -> for test
         PointToPointConnection(const PointToPointConnection&) = delete;
         PointToPointConnection& operator=(const PointToPointConnection&) = delete;
         PointToPointConnection(PointToPointConnection&&) = default;
@@ -116,36 +112,99 @@ class PointToPointConnection {
             onSend(sendCallback),
             onReceive(receiveCallback),
             active(sendCallback && receiveCallback) {}
-    private:
+    //private: -> TODO: for test
         bool active{false};
         RawDataHandler onSend;
         RawDataHandler onReceive;
 };
 
+struct BaseNode;
 
-struct NodeInfo
+// Function management
+// Using negative number as resrved ID.
+enum ReservedFunctions : FunctionID {
+    INVALID_FUNCTION          = -1,
+    REQUEST_NODENAME          = -2,
+    REQUEST_FUNCTION_STATUS   = -3,
+    REQUEST_AVAILBLE_FUNCTION = -4,
+};
+
+enum FunctionStatus : int32_t {
+    STATUS_INVALID = 0,
+    STATUS_VALID,
+    STATUS_NOT_EXIST
+};
+
+struct FunctionInfo {
+    bool valid{false};
+    std::string functionName;
+    FunctionID index{-1};
+};
+
+struct FunctionImplemention : public FunctionInfo
+{
+    // Function implemention.
+    std::function<bool(const RawData& input, RawData& output)> handler;
+};
+
+class FunctionManager 
+{
+    private:
+    // For remote node, the handler is not implemented (as it should implemented in remote node).
+    bool isRemote{false};
+    std::unordered_map<std::string, FunctionID> FunctionIndexingMap;
+    std::unordered_map<FunctionID, FunctionImplemention> FunctionMap;
+    BaseNode* parentNode{nullptr};
+    // Alloc resrved functions.
+    inline void initialize();
+
+    public:
+    inline bool isFuncExist(std::string name) { 
+        return FunctionIndexingMap.count(name) > 0 ? 
+               FunctionMap.count(FunctionIndexingMap[name]) > 0:
+               false;
+    }
+    inline bool isFuncExist(FunctionID funcId) { return FunctionMap.count(funcId) > 0; }
+    FunctionID getIndexByName(std::string name);
+    FunctionImplemention& getFunc(FunctionID funcId);
+    FunctionImplemention& getFunc(std::string name);
+    const FunctionInfo& getFuncInfo(FunctionID funcId) { return getFunc(funcId); }
+    const FunctionInfo& getFuncInfo(std::string name) { return getFunc(name); }
+    bool registerFunction(FunctionImplemention info);
+
+    FunctionManager() = delete;
+    FunctionManager(bool isRemote_) :isRemote(isRemote_) {}
+    FunctionManager(bool isRemote_, BaseNode* parentNode_) :isRemote(isRemote_), parentNode(parentNode_) {}
+};
+
+struct BaseNode
 {
     const std::string nodeName;
 };
 
-class RemoteNode : public NodeInfo
+class RemoteNode : public BaseNode
 {
     private:
     PointToPointConnection connection;
 
+    // Function management and APIs.
     public:
-    RemoteNode(PointToPointConnection&& connection_) : connection(std::move(connection_)){}
+    FunctionManager functions;
+
+    // Assuming remote function calls are synchronous.
+    // TODO: implement asynchronous call.
+    bool call(const FunctionInfo& funcInfo, RawData parameter = {}, bool synchronous = false);
+
+    public:
+    RemoteNode(PointToPointConnection&& connection_);
     RemoteNode(const RemoteNode&) = delete;
     RemoteNode& operator=(const RemoteNode&) = delete;
     RemoteNode(RemoteNode&&) = default;
-    RemoteNode() = delete;
+    //RemoteNode() = delete;
+    RemoteNode() = default;
 };
 
-//RemoteNode initializeNode(PointToPointConnection connection) {
-//
-//}
-
-class SakataNode : public NodeInfo
+class SakataNode : public BaseNode
 {
     // Peer control and APIs.
     private:

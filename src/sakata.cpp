@@ -162,4 +162,107 @@ const RawData Packet::serialize() {
     return rawData;
 }
 
+void FunctionManager::initialize() {
+    // Note: Function implementation can be overridden by the parent.
+    // REQUEST_NODENAME
+    registerFunction({
+        true,
+        "REQUEST_NODENAME",
+        ReservedFunctions::REQUEST_NODENAME,
+        [parentNode = parentNode] (const RawData& input, RawData& output) -> bool {
+            if (parentNode) {
+                for (char ch: parentNode->nodeName) {
+                    output.push_back(static_cast<uint8_t>(ch));
+                }
+            }
+            return true;
+        }
+    });
+    //REQUEST_FUNCTION_STATUS
+    registerFunction({
+        true,
+        "REQUEST_FUNCTION_STATUS",
+        ReservedFunctions::REQUEST_FUNCTION_STATUS,
+        [&] (const RawData& input, RawData& output) -> bool {
+            // input: funciton name -> char array
+            std::string funcName(input.begin(), input.end());
+            if (isFuncExist(funcName)) {
+                auto funcId = getIndexByName(funcName);
+                if (getFunc(funcId).valid) {
+                    AppendVariableToRawData(FunctionStatus::STATUS_VALID, output);
+                } else {
+                    AppendVariableToRawData(FunctionStatus::STATUS_INVALID, output);
+                }
+            } else {
+                AppendVariableToRawData(FunctionStatus::STATUS_NOT_EXIST, output);
+            }
+            return true;
+        }
+    });
+    // TODO: REQUEST_AVAILBLE_FUNCTION
+    // By any means the client should know what function they need to call.
+}
+
+FunctionID FunctionManager::getIndexByName(std::string name) {
+    if (!isFuncExist(name)) {
+        return ReservedFunctions::INVALID_FUNCTION;
+    }
+    return FunctionIndexingMap[name];
+}
+
+FunctionImplemention INVALID_FUNCTION_IMPLEMENTION;
+
+FunctionImplemention& FunctionManager::getFunc(FunctionID funcId) {
+    if (!isFuncExist(funcId)) {
+        return INVALID_FUNCTION_IMPLEMENTION;
+    }
+    return FunctionMap[funcId];
+}
+
+FunctionImplemention& FunctionManager::getFunc(std::string name) {
+    if (!isFuncExist(name)) {
+        return INVALID_FUNCTION_IMPLEMENTION;
+    }
+    auto funcId = getIndexByName(name);
+    return FunctionMap[funcId];
+}
+
+bool FunctionManager::registerFunction(FunctionImplemention info) {
+    if (FunctionIndexingMap.count(info.functionName) > 0) {
+        return false;
+    }
+    if (FunctionMap.count(info.index) > 0) {
+        return false;
+    }
+    FunctionIndexingMap[info.functionName] = info.index;
+    FunctionMap[info.index] = info;
+    return true;
+}
+
+bool RemoteNode::call(const FunctionInfo& funcInfo, RawData parameter, bool synchronous) {
+    // Ignore invalid call
+    if (!funcInfo.valid) {
+        return false;
+    }
+    
+    // Build the request packet.
+    Packet packet;
+    packet.start = PACKET_START;
+    packet.cmd = Commands::REQUEST;
+    packet.sequence = -1;
+    packet.dataLength = parameter.size();
+    packet.functionId = funcInfo.index;
+    packet.requestSN = 0;
+    packet.functionParameter = parameter;
+    packet.end;
+
+    return connection.Send(packet.serialize());
+}
+
+RemoteNode::RemoteNode(PointToPointConnection&& connection_) :
+connection(std::move(connection_)), functions(true, this) {
+    // TODO:
+    // Init remote node.
+}
+
 }
