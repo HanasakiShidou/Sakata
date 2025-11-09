@@ -15,6 +15,7 @@ constexpr uint8_t PACKET_START     = 0xAA;
 constexpr uint8_t PACKET_END       = 0x55;
 constexpr size_t  MAX_PAYLOAD      = 256;
 constexpr size_t  MAX_BUFFERSIZE   = 1024;
+constexpr int CALL_TIME_OUT_TIME   = 5; // in second
 
 enum class Commands : uint8_t {
     REQUEST,
@@ -27,6 +28,7 @@ enum class Commands : uint8_t {
 // Basic data structs & types.
 
 using FunctionID = int32_t;
+using NodeID = int32_t;
 using RequestSequenceNumber = int32_t;
 using RawData = std::vector<uint8_t>;
 using RawDataHandler = std::function<bool(RawData)>;
@@ -177,25 +179,70 @@ class FunctionManager
     FunctionManager(bool isRemote_, BaseNode* parentNode_) :isRemote(isRemote_), parentNode(parentNode_) {}
 };
 
+struct SakataRequest {
+    enum Status {
+        // For outcoming.
+        OUTCOMING_CREATED,
+        OUTCOMING_SENT,
+        OUTCOMING_RETRY,
+        OUTCOMING_CALL_FAILED,
+        OUTCOMING_RESPONSED,
+        OUTCOMING_UNINIALIZED,
+        // For incoming.
+        INCOMING_CREATED,
+        INCOMING_SENT,
+        INCOMING_RETRY,
+        INCOMING_CALL_FAILED,
+        INCOMING_CALL_FINISHED,
+        INCOMING_RESPONSED,
+        INCOMING_UNINIALIZED,
+        // For resource management.
+        REQ_FINISHED,
+    } status {OUTCOMING_UNINIALIZED};
+    const RequestSequenceNumber requestSN{0};
+    const FunctionInfo& func;
+    RawData incomingBuffer{};
+    RawData outcomingPayload{};
+};
+
+struct SakataRemoteRequest : public SakataRequest {
+    NodeID remoteNodeId{0};
+};
+
 struct BaseNode
 {
-    const std::string nodeName;
+    NodeID nodeId{0};
+    std::string nodeName;
 };
 
 class RemoteNode : public BaseNode
 {
     private:
     PointToPointConnection connection;
+    std::vector<SakataRequest> outcomingRequest;
+    RequestSequenceNumber currentSequence{0};
+
+    // true means a request is sent.
+    bool processRequest(std::vector<SakataRequest>::iterator reqIt);
 
     // Function management and APIs.
     public:
     FunctionManager functions;
 
     // Assuming remote function calls are synchronous.
-    // TODO: implement asynchronous call.
-    bool call(const FunctionInfo& funcInfo, RawData parameter = {}, bool synchronous = false);
+    bool call(const FunctionInfo& funcInfo, const RawData parameter, RawData& response, RequestSequenceNumber& token, bool synchronous = false);
+    // For asynchronous call.
+    bool getCallResponse(RequestSequenceNumber reqSN, RawData& response);
+
+    // Get sequence.
+    inline RequestSequenceNumber generateSequenceNumber() {
+        currentSequence++;
+        currentSequence = currentSequence < 0 ? 0 : currentSequence;
+        return currentSequence;
+    }
 
     public:
+    bool handleResponsePacket(const Packet& packet);
     RemoteNode(PointToPointConnection&& connection_);
     RemoteNode(const RemoteNode&) = delete;
     RemoteNode& operator=(const RemoteNode&) = delete;
@@ -208,15 +255,38 @@ class SakataNode : public BaseNode
 {
     // Peer control and APIs.
     private:
-    std::unordered_map<std::string, PointToPointConnection> nodeMap;
+    std::unordered_map<std::string, NodeID> nodeIndexingMap;
+    std::unordered_map<NodeID, RemoteNode> nodeMap;
+    NodeID currentRemoteNode{1};
 
     public:
-    bool registerNodeMap(RawDataHandler handler);
+    inline bool isNodeExist(std::string name) {
+        return nodeIndexingMap.count(name) > 0 ?
+               nodeMap.count(nodeIndexingMap[name]) > 0:
+               false;
+    }
+    inline bool isNodeExist(NodeID nodeId) { return nodeMap.count(nodeId) > 0; }
+    NodeID getIndexByName(std::string name);
+    RemoteNode* getNode(std::string name);
+    RemoteNode* getNode(NodeID nodeId);
+    bool registerNode(PointToPointConnection&& connection);
+
+    // Incoming reqest to this node.
+    private:
+    std::vector<SakataRemoteRequest> incomingRequest;
+
+    // In/Out conn
+    public:
+    void onPacketIn(const RawData& rawdata, NodeID nodeid);
 
     // Function management and APIs.
     private:
+    FunctionManager functions;
+    bool handleCall(std::vector<SakataRemoteRequest>::iterator reqIt);
+    bool SendResp(std::vector<SakataRemoteRequest>::iterator reqIt);
 
     public:
+    bool registerFunction(FunctionImplemention info) { return functions.registerFunction(info); }
 
 };
 
