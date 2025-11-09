@@ -244,7 +244,7 @@ bool FunctionManager::registerFunction(FunctionImplemention info) {
 bool RemoteNode::processRequest(std::vector<SakataRequest>::iterator reqIt) {
     auto& req = *reqIt;
     if (req.status != SakataRequest::OUTCOMING_CREATED)
-        return;
+        return false;
 
     // Build the packet and send.
     Packet packet;
@@ -274,8 +274,10 @@ bool RemoteNode::handleResponsePacket(const Packet& packet) {
         if (packet.requestSN == request.requestSN) {
             request.status = SakataRequest::OUTCOMING_RESPONSED;
             request.incomingBuffer = packet.functionResult;
+            return true;
         }
     }
+    return false;
 }
 
 bool RemoteNode::getCallResponse(RequestSequenceNumber reqSN, RawData& response) {
@@ -293,15 +295,14 @@ bool RemoteNode::getCallResponse(RequestSequenceNumber reqSN, RawData& response)
     return false;
 }
 
-bool RemoteNode::call(const FunctionInfo& funcInfo, const RawData parameter, RawData& response, RequestSequenceNumber& token, bool synchronous = false) {
+bool RemoteNode::call(const FunctionInfo& funcInfo, const RawData parameter, RawData& response, RequestSequenceNumber& token, bool synchronous) {
     // Ignore invalid call
     if (!funcInfo.valid) {
         return false;
     }
     
     // Build Request
-    auto reqIt = outcomingRequest.insert(
-        outcomingRequest.end(),
+    outcomingRequest.emplace_back(
         SakataRequest({
             .status = SakataRequest::OUTCOMING_CREATED,
             .requestSN = generateSequenceNumber(),
@@ -309,6 +310,7 @@ bool RemoteNode::call(const FunctionInfo& funcInfo, const RawData parameter, Raw
             .outcomingPayload = parameter,
         })
     );
+    auto reqIt = outcomingRequest.end();
 
     if (synchronous) {
         // IF call synchronous, wait for CALL_TIME_OUT_TIME seconds.
@@ -342,12 +344,12 @@ NodeID SakataNode::getIndexByName(std::string name) {
 RemoteNode* SakataNode::getNode(std::string name) {
     return nodeIndexingMap.count(name) <= 0 ? nullptr :
             (
-                nodeMap.count(nodeIndexingMap[name]) <= 0 ? nullptr : &(nodeMap[nodeIndexingMap[name]])
+                nodeMap.count(nodeIndexingMap.at(name)) <= 0 ? nullptr : &(nodeMap.at(nodeIndexingMap.at(name)))
             );
 }
 
 RemoteNode* SakataNode::getNode(NodeID nodeId) {
-    return nodeMap.count(nodeId) > 0 ? &(nodeMap[nodeId]) : nullptr;
+    return nodeMap.count(nodeId) > 0 ? &(nodeMap.at(nodeId)) : nullptr;
 }
 
 bool SakataNode::registerNode(PointToPointConnection&& connection) {
@@ -389,7 +391,8 @@ void SakataNode::onPacketIn(const RawData& rawdata, NodeID nodeId) {
             .incomingBuffer = packet.functionResult,
         });
         remoteRequest.remoteNodeId = nodeId;
-        auto it = incomingRequest.insert(incomingRequest.end(), std::move(remoteRequest));
+        incomingRequest.emplace_back(std::move(remoteRequest));
+        auto it = incomingRequest.end();
         handleCall(it);
     } else if (packet.cmd == Commands::RESPONSE) {
         nodeMap.at(nodeId).handleResponsePacket(packet);
@@ -414,7 +417,7 @@ bool SakataNode::handleCall(std::vector<SakataRemoteRequest>::iterator reqIt) {
     }
 }
 
-bool SakataNode::handleCall(std::vector<SakataRemoteRequest>::iterator reqIt) {
+bool SakataNode::SendResp(std::vector<SakataRemoteRequest>::iterator reqIt) {
     // TODO:
     return true;
 }
