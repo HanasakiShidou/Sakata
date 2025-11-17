@@ -418,8 +418,34 @@ bool SakataNode::handleCall(std::vector<SakataRemoteRequest>::iterator reqIt) {
 }
 
 bool SakataNode::SendResp(std::vector<SakataRemoteRequest>::iterator reqIt) {
-    // TODO:
-    return true;
+    if (reqIt->status != SakataRemoteRequest::INCOMING_CALL_FINISHED) {
+        return false;
+    }
+
+    if (!isNodeExist(reqIt->remoteNodeId)) {
+        reqIt->status = SakataRemoteRequest::OUTCOMING_CALL_FAILED;
+        return false;
+    }
+
+    // Build response packet.
+    Packet packet;
+    packet.start = PACKET_START;
+    packet.cmd = Commands::RESPONSE;
+    packet.sequence = 0;
+    packet.dataLength = reqIt->outcomingPayload.size();
+    packet.functionId = reqIt->func.index;
+    packet.requestSN = reqIt->requestSN;
+    packet.functionResult = reqIt->outcomingPayload;
+    packet.end = PACKET_END;
+
+    auto remoteNode = getNode(reqIt->remoteNodeId);
+    auto ret = remoteNode->connection.Send(packet.serialize());
+    if (!ret) {
+        reqIt->status = SakataRequest::OUTCOMING_CALL_FAILED;
+    } else {
+        reqIt->status = SakataRequest::OUTCOMING_SENT;
+    }
+    return ret;
 }
 
 }

@@ -215,6 +215,8 @@ struct BaseNode
     std::string nodeName;
 };
 
+class SakataNode;
+
 class RemoteNode : public BaseNode
 {
     private:
@@ -249,6 +251,7 @@ class RemoteNode : public BaseNode
     RemoteNode(RemoteNode&&) = default;
     //RemoteNode() = delete;
     RemoteNode() = default;
+    friend class SakataNode;
 };
 
 class SakataNode : public BaseNode
