@@ -153,7 +153,8 @@ class FunctionManager
 {
     private:
     // For remote node, the handler is not implemented (as it should implemented in remote node).
-    bool isRemote{false};
+    // We can get this info from parent node.
+    //bool isRemote{false};
     std::unordered_map<std::string, FunctionID> FunctionIndexingMap;
     std::unordered_map<FunctionID, FunctionImplemention> FunctionMap;
     BaseNode* parentNode{nullptr};
@@ -174,9 +175,8 @@ class FunctionManager
     const FunctionInfo& getFuncInfo(std::string name) { return getFunc(name); }
     bool registerFunction(FunctionImplemention info);
 
-    FunctionManager() = delete;
-    FunctionManager(bool isRemote_) :isRemote(isRemote_) {}
-    FunctionManager(bool isRemote_, BaseNode* parentNode_) :isRemote(isRemote_), parentNode(parentNode_) {}
+    FunctionManager() = default;
+    FunctionManager(BaseNode* parentNode_) : parentNode(parentNode_) {}
 };
 
 struct SakataRequest {
@@ -194,6 +194,7 @@ struct SakataRequest {
         INCOMING_RETRY,
         INCOMING_CALL_FAILED,
         INCOMING_CALL_FINISHED,
+        INCOMING_RESPONSE_FAILED,
         INCOMING_RESPONSED,
         INCOMING_UNINIALIZED,
         // For resource management.
@@ -268,7 +269,7 @@ class SakataNode : public BaseNode
                nodeMap.count(nodeIndexingMap[name]) > 0:
                false;
     }
-    inline bool isNodeExist(NodeID nodeId) { return nodeMap.count(nodeId) > 0; }
+    inline bool isNodeExist(NodeID nodeId) { return nodeId == 0 ? true : nodeMap.count(nodeId) > 0; }
     NodeID getIndexByName(std::string name);
     RemoteNode* getNode(std::string name);
     RemoteNode* getNode(NodeID nodeId);
@@ -291,6 +292,7 @@ class SakataNode : public BaseNode
     public:
     bool registerFunction(FunctionImplemention info) { return functions.registerFunction(info); }
 
+    SakataNode() : functions(this) {};
 };
 
 

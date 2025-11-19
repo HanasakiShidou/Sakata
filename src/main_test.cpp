@@ -6,7 +6,8 @@
 #include "sakata.hpp"
 
 //#define TEST_Serialization
-#define TEST_PtP_Connection
+//#define TEST_PtP_Connection
+#define TEST_Function_Call
 
 void checkPacketEqual(Sakata::Packet& base, Sakata::Packet& ref) {
     assert(base.isValid());
@@ -89,5 +90,17 @@ checkPacketEqual(test_packet, rec_packet);
 
 #endif
 
+#ifdef TEST_Function_Call
+
+#endif
+
+    Sakata::SakataNode server;
+    Sakata::SakataNode client;
+
+    server.nodeName = "SERVER";
+    client.nodeName = "CLIENT";
+
+
+    
     return 0;
 }

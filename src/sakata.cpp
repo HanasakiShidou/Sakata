@@ -333,7 +333,7 @@ bool RemoteNode::call(const FunctionInfo& funcInfo, const RawData parameter, Raw
 }
 
 RemoteNode::RemoteNode(PointToPointConnection&& connection_) :
-connection(std::move(connection_)), functions(true, this) {
+connection(std::move(connection_)), functions(this) {
     
 }
 
@@ -423,7 +423,7 @@ bool SakataNode::SendResp(std::vector<SakataRemoteRequest>::iterator reqIt) {
     }
 
     if (!isNodeExist(reqIt->remoteNodeId)) {
-        reqIt->status = SakataRemoteRequest::OUTCOMING_CALL_FAILED;
+        reqIt->status = SakataRemoteRequest::INCOMING_RESPONSE_FAILED;
         return false;
     }
 
@@ -441,11 +441,14 @@ bool SakataNode::SendResp(std::vector<SakataRemoteRequest>::iterator reqIt) {
     auto remoteNode = getNode(reqIt->remoteNodeId);
     auto ret = remoteNode->connection.Send(packet.serialize());
     if (!ret) {
-        reqIt->status = SakataRequest::OUTCOMING_CALL_FAILED;
+        reqIt->status = SakataRequest::INCOMING_RESPONSE_FAILED;
     } else {
-        reqIt->status = SakataRequest::OUTCOMING_SENT;
+        reqIt->status = SakataRequest::INCOMING_RESPONSED;
     }
     return ret;
 }
+
+// TODO: A local node should be strictly bound to a remote node, meaning that the node pair is attached to a peer-to-peer link. 
+// Managing multiple nodes is the user's responsibility.
 
 }
