@@ -241,6 +241,21 @@ bool FunctionManager::registerFunction(FunctionImplemention info) {
     return true;
 }
 
+RequestSequenceNumber globalSeq{0};
+
+RequestSequenceNumber RemoteNode::getNewSeq() {
+    globalSeq++;
+    return globalSeq;
+}
+
+bool RemoteNode::processRequest() {
+    bool ret = false;
+    for (auto reqIt = outcomingRequest.begin(); reqIt != outcomingRequest.end(); reqIt++) {
+        ret |= processRequest(reqIt);
+    }
+    return ret;
+}
+
 bool RemoteNode::processRequest(std::vector<SakataRequest>::iterator reqIt) {
     auto& req = *reqIt;
     if (req.status != SakataRequest::OUTCOMING_CREATED)
@@ -305,7 +320,7 @@ bool RemoteNode::call(const FunctionInfo& funcInfo, const RawData parameter, Raw
     outcomingRequest.emplace_back(
         SakataRequest({
             .status = SakataRequest::OUTCOMING_CREATED,
-            .requestSN = generateSequenceNumber(),
+            .requestSN = getNewSeq(),
             .func = funcInfo,
             .outcomingPayload = parameter,
         })
@@ -332,9 +347,26 @@ bool RemoteNode::call(const FunctionInfo& funcInfo, const RawData parameter, Raw
     return true;
 }
 
-RemoteNode::RemoteNode(PointToPointConnection&& connection_) :
-connection(std::move(connection_)), functions(this) {
-    
+void RemoteNode::onPacketIn(const RawData& rawdata) {
+    if (parentNode) {
+        parentNode->onPacketIn(rawdata, nodeId);
+    }
+}
+
+RemoteNode::RemoteNode(RawDataHandler outComeDataHandler, SakataNode* parentNode_) :
+    connection(
+        outComeDataHandler,
+        [&] (RawData rawData) -> bool {
+            if (parentNode) {
+                onPacketIn(rawData);
+                return true;
+            } else {
+                return false;
+            }
+        }
+    ),
+    parentNode(parentNode_),
+    functions(this) {   
 }
 
 NodeID SakataNode::getIndexByName(std::string name) {
@@ -352,29 +384,22 @@ RemoteNode* SakataNode::getNode(NodeID nodeId) {
     return nodeMap.count(nodeId) > 0 ? &(nodeMap.at(nodeId)) : nullptr;
 }
 
-bool SakataNode::registerNode(PointToPointConnection&& connection) {
-    RemoteNode remoteNode(std::move(connection));
-    RawData response;
-    RequestSequenceNumber token{0};
-    bool succeeded = remoteNode.call(
-        remoteNode.functions.getFuncInfo("REQUEST_NODENAME"),
-        {},
-        response,
-        token,
-        true
-    );
-    if (!succeeded) {
-        return false;
-    }
+NodeID globalNodeId{0};
 
-    std::string remoteNodeName(response.begin(), response.end());
-    remoteNode.nodeName = remoteNodeName;
-    remoteNode.nodeId = currentRemoteNode++;
+NodeID SakataNode::getNewNodeId() {
+    globalNodeId++;
+    return globalNodeId;
+}
 
-    nodeIndexingMap[remoteNodeName] = remoteNode.nodeId;
+NodeID SakataNode::registerNode(RawDataHandler outComeDataHandler) {
+    RemoteNode remoteNode(outComeDataHandler, this);
+    remoteNode.nodeId = getNewNodeId();
+
+    // Note: current this is a uname node.
+    //nodeIndexingMap[remoteNode.nodeName] = remoteNode.nodeId;
     nodeMap.emplace(remoteNode.nodeId, std::move(remoteNode));
 
-    return true;
+    return remoteNode.nodeId;
 }
 
 void SakataNode::onPacketIn(const RawData& rawdata, NodeID nodeId) {
@@ -393,6 +418,7 @@ void SakataNode::onPacketIn(const RawData& rawdata, NodeID nodeId) {
         remoteRequest.remoteNodeId = nodeId;
         incomingRequest.emplace_back(std::move(remoteRequest));
         auto it = incomingRequest.end();
+        it--;
         handleCall(it);
     } else if (packet.cmd == Commands::RESPONSE) {
         nodeMap.at(nodeId).handleResponsePacket(packet);
@@ -444,6 +470,14 @@ bool SakataNode::SendResp(std::vector<SakataRemoteRequest>::iterator reqIt) {
         reqIt->status = SakataRequest::INCOMING_RESPONSE_FAILED;
     } else {
         reqIt->status = SakataRequest::INCOMING_RESPONSED;
+    }
+    return ret;
+}
+
+bool SakataNode::SendResp() {
+    bool ret = false;
+    for (auto reqIt = incomingRequest.begin(); reqIt != incomingRequest.end(); reqIt++) {
+        ret |= SendResp(reqIt);
     }
     return ret;
 }

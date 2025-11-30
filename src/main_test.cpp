@@ -94,13 +94,41 @@ checkPacketEqual(test_packet, rec_packet);
 
 #endif
 
+    Sakata::RawData serverBuffer;
+    Sakata::RawData clientBuffer;
+
     Sakata::SakataNode server;
     Sakata::SakataNode client;
 
     server.nodeName = "SERVER";
     client.nodeName = "CLIENT";
 
+    auto serverRemoteId = server.registerNode([&serverBuffer] (Sakata::RawData rawData) -> bool {
+        serverBuffer = rawData;
+        return true;
+    });
 
-    
+    auto clientRemoteId = client.registerNode([&clientBuffer] (Sakata::RawData rawData) -> bool {
+        clientBuffer = rawData;
+        return true;
+    });
+
+    auto serverRemoteNodePtr = server.getNode(serverRemoteId);
+    assert(serverRemoteNodePtr);
+
+    auto FuncInfo = serverRemoteNodePtr->functions.getFuncInfo("REQUEST_NODENAME");
+
+    Sakata::RawData response;
+    Sakata::RequestSequenceNumber token;
+
+    serverRemoteNodePtr->call(FuncInfo, {}, response, token);
+
+    serverRemoteNodePtr->processRequest();
+
+    client.onPacketIn(serverBuffer, clientRemoteId);
+    client.SendResp();
+
+    serverRemoteNodePtr->onPacketIn(clientBuffer);
+
     return 0;
 }

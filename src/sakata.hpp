@@ -159,7 +159,7 @@ class FunctionManager
     std::unordered_map<FunctionID, FunctionImplemention> FunctionMap;
     BaseNode* parentNode{nullptr};
     // Alloc resrved functions.
-    inline void initialize();
+    void initialize();
 
     public:
     inline bool isFuncExist(std::string name) { 
@@ -176,7 +176,9 @@ class FunctionManager
     bool registerFunction(FunctionImplemention info);
 
     FunctionManager() = default;
-    FunctionManager(BaseNode* parentNode_) : parentNode(parentNode_) {}
+    FunctionManager(BaseNode* parentNode_) : parentNode(parentNode_) {
+        initialize();
+    }
 };
 
 struct SakataRequest {
@@ -213,7 +215,7 @@ struct SakataRemoteRequest : public SakataRequest {
 struct BaseNode
 {
     NodeID nodeId{0};
-    std::string nodeName;
+    std::string nodeName{"DEFAULT"};
 };
 
 class SakataNode;
@@ -223,7 +225,7 @@ class RemoteNode : public BaseNode
     private:
     PointToPointConnection connection;
     std::vector<SakataRequest> outcomingRequest;
-    RequestSequenceNumber currentSequence{0};
+    SakataNode* parentNode;
 
     // true means a request is sent.
     bool processRequest(std::vector<SakataRequest>::iterator reqIt);
@@ -231,22 +233,22 @@ class RemoteNode : public BaseNode
     // Function management and APIs.
     public:
     FunctionManager functions;
+    // true means a request is sent.
+    bool processRequest();
 
     // Assuming remote function calls are synchronous.
     bool call(const FunctionInfo& funcInfo, const RawData parameter, RawData& response, RequestSequenceNumber& token, bool synchronous = false);
     // For asynchronous call.
     bool getCallResponse(RequestSequenceNumber reqSN, RawData& response);
+    inline RawDataHandler getInComeDataHandler() { return connection.getReceiveCallback(); }
 
     // Get sequence.
-    inline RequestSequenceNumber generateSequenceNumber() {
-        currentSequence++;
-        currentSequence = currentSequence < 0 ? 0 : currentSequence;
-        return currentSequence;
-    }
+    RequestSequenceNumber getNewSeq();
 
     public:
+    void onPacketIn(const RawData& rawdata);
     bool handleResponsePacket(const Packet& packet);
-    RemoteNode(PointToPointConnection&& connection_);
+    RemoteNode(RawDataHandler outComeDataHandler, SakataNode* parentNode_);
     RemoteNode(const RemoteNode&) = delete;
     RemoteNode& operator=(const RemoteNode&) = delete;
     RemoteNode(RemoteNode&&) = default;
@@ -255,13 +257,14 @@ class RemoteNode : public BaseNode
     friend class SakataNode;
 };
 
+// Complex node 
 class SakataNode : public BaseNode
 {
     // Peer control and APIs.
     private:
     std::unordered_map<std::string, NodeID> nodeIndexingMap;
     std::unordered_map<NodeID, RemoteNode> nodeMap;
-    NodeID currentRemoteNode{1};
+    NodeID getNewNodeId();
 
     public:
     inline bool isNodeExist(std::string name) {
@@ -273,7 +276,7 @@ class SakataNode : public BaseNode
     NodeID getIndexByName(std::string name);
     RemoteNode* getNode(std::string name);
     RemoteNode* getNode(NodeID nodeId);
-    bool registerNode(PointToPointConnection&& connection);
+    NodeID registerNode(RawDataHandler outComeDataHandler);
 
     // Incoming reqest to this node.
     private:
@@ -290,10 +293,12 @@ class SakataNode : public BaseNode
     bool SendResp(std::vector<SakataRemoteRequest>::iterator reqIt);
 
     public:
+    bool SendResp();
     bool registerFunction(FunctionImplemention info) { return functions.registerFunction(info); }
 
     SakataNode() : functions(this) {};
 };
 
+// Simple node
 
 } // Namespace Sakata
