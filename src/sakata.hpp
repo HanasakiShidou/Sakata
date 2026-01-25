@@ -105,15 +105,27 @@ class FunctionManager
     }
 };
 
+struct Signal {
+    private:
+        std::atomic<bool> signal_{false};
+    public:
+        void inline release() {
+            signal_.store(true, std::memory_order_release);
+        }
+        bool inline acquire() {
+            return signal_.load(std::memory_order_acquire);
+        }
+    };
+
 struct SakataRequest {
-    enum Status {
+    enum class Status {
         // For outcoming.
         OUTCOMING_CREATED,
         OUTCOMING_SENT,
         OUTCOMING_RETRY,
         OUTCOMING_CALL_FAILED,
         OUTCOMING_RESPONSED,
-        OUTCOMING_UNINIALIZED,
+        //OUTCOMING_UNINIALIZED,
         // For incoming.
         INCOMING_CREATED,
         INCOMING_SENT,
@@ -122,10 +134,11 @@ struct SakataRequest {
         INCOMING_CALL_FINISHED,
         INCOMING_RESPONSE_FAILED,
         INCOMING_RESPONSED,
-        INCOMING_UNINIALIZED,
+        //INCOMING_UNINIALIZED,
         // For resource management.
+        REQ_UNINIALIZED,
         REQ_FINISHED,
-    } status {OUTCOMING_UNINIALIZED};
+    } status {Status::REQ_UNINIALIZED};
     const RequestSequenceNumber requestSN{0};
     const FunctionInfo& func;
     // Function call parameter buffer
@@ -133,36 +146,25 @@ struct SakataRequest {
     // Responsed function call result.
     RawData responseResult{};
     
-    const Packet buildResp();
-
-    private:
-    // For both income/outcome request.
-    // Only if the request is done, we can start to transfer data.
-    std::atomic<bool> _finished{false};
-
-    public:
-    // The node will only store "true" and load "false"
-    // The user application will only store "false" and load "true"
-    void inline release(const bool val) {
-        _finished.store(val, std::memory_order_release);
-    }
-    bool inline acquire() {
-        return _finished.load(std::memory_order_acquire);
-    }
+    // To info the consumer is able to read the data
+    Signal ready;
+    // To info the porducer is able to release this request
+    Signal done;
 };
 
 class SakataCallResult {
     SakataRequest& request;
     public:
+    SakataCallResult(SakataRequest& request_) :request(request_) {}
     inline bool isDone() {
-        return request.acquire() == true;
+        return request.ready.acquire() == true;
     }
     // template
-    void read();
+    const RawData& getRawData() { return request.responseResult; }
     // When result read is done, the node can release the resource.
     ~SakataCallResult() {
-        request.status = SakataRequest::REQ_FINISHED;
-        request.release(true);
+        request.status = SakataRequest::Status::REQ_FINISHED;
+        request.done.release();
     }
 };
 
@@ -174,36 +176,45 @@ struct BaseNode
 
 class SakataNode;
 
+// Remote endpoints
 class RemoteNode : public BaseNode
 {
     private:
-    PointToPointConnection connection;
+    std::shared_ptr<PointToPointConnection> connection{nullptr};
     std::vector<SakataRequest> outcomingCallRequest;
     std::vector<SakataRequest> incomingCallRequest;
     SakataNode* parentNode;
+    RequestSequenceNumber currentSq{0};
 
     // true means a request is sent.
-    bool processRequest(std::vector<SakataRequest>::iterator reqIt);
+    bool processIncomingRequest(std::vector<SakataRequest>::iterator reqIt);
+    bool processOutcomingRequest(std::vector<SakataRequest>::iterator reqIt);
+    bool releaseRequest();
+    // true means a request is sent.
+    bool processRequest();
+    bool handleResponsePacket(const Packet& packet);
+
+    public:
+    // connection call back.
+    void onPacketIn(const RawData& rawdata);
 
     // Function management and APIs.
     public:
     FunctionManager functions;
-    // true means a request is sent.
-    bool processRequest();
 
     // Assuming remote function calls are synchronous.
-    bool call(const FunctionInfo& funcInfo, const RawData parameter, RawData& response, RequestSequenceNumber& token, bool synchronous = false);
+    SakataCallResult call(const FunctionInfo& funcInfo, const RawData parameter, bool synchronous = false);
     // For asynchronous call.
-    bool getCallResponse(RequestSequenceNumber reqSN, RawData& response);
-    inline RawDataHandler getInComeDataHandler() { return connection.getReceiveCallback(); }
+    //bool getCallResponse(RequestSequenceNumber reqSN, RawData& response);
 
+    private:
     // Get sequence.
     RequestSequenceNumber getNewSeq();
 
     public:
-    void onPacketIn(const RawData& rawdata);
-    bool handleResponsePacket(const Packet& packet);
-    RemoteNode(RawDataHandler outComeDataHandler, SakataNode* parentNode_);
+    inline void work() { processRequest(); }
+
+    RemoteNode(std::shared_ptr<PointToPointConnection> connection_, SakataNode* parentNode_);
     RemoteNode(const RemoteNode&) = delete;
     RemoteNode& operator=(const RemoteNode&) = delete;
     RemoteNode(RemoteNode&&) = default;
@@ -212,7 +223,9 @@ class RemoteNode : public BaseNode
     friend class SakataNode;
 };
 
-// Local node 
+// Local node
+// A remote node should be strictly bound to a peer-to-peer link. 
+// Managing peer-to-peer link is the user's responsibility.
 class SakataNode : public BaseNode
 {
     // Peer control and APIs.
@@ -221,6 +234,7 @@ class SakataNode : public BaseNode
     std::unordered_map<NodeID, RemoteNode> nodeMap;
     NodeID getNewNodeId();
 
+    // Node management
     public:
     inline bool isNodeExist(std::string name) {
         return nodeIndexingMap.count(name) > 0 ?
@@ -231,25 +245,24 @@ class SakataNode : public BaseNode
     NodeID getIndexByName(std::string name);
     RemoteNode* getNode(std::string name);
     RemoteNode* getNode(NodeID nodeId);
-    NodeID registerNode(RawDataHandler outComeDataHandler);
-
-    // Incoming reqest to this node.
-    private:
-    std::vector<SakataRemoteRequest> incomingRequest;
-
-    // In/Out conn
-    public:
-    void onPacketIn(const RawData& rawdata, NodeID nodeid);
+    NodeID registerNode(std::shared_ptr<PointToPointConnection> connection_);
 
     // Function management and APIs.
     private:
     FunctionManager functions;
-    bool handleCall(std::vector<SakataRemoteRequest>::iterator reqIt);
-    bool SendResp(std::vector<SakataRemoteRequest>::iterator reqIt);
+    bool handleCall(std::vector<SakataRequest>::iterator reqIt, RemoteNode& remoteNode);
 
     public:
-    bool SendResp();
     bool registerFunction(FunctionImplemention info) { return functions.registerFunction(info); }
+
+    bool processRemoteNodeRequests();
+    public:
+    // Thread entrypoint.
+    inline void work() { processRemoteNodeRequests(); }
+
+    // Remote node interface
+    public:
+    bool handleRequest(const Packet& packet, RemoteNode& node);
 
     SakataNode() : functions(this) {};
 };

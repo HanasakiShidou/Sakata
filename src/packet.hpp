@@ -70,6 +70,12 @@ struct PacketBody
     uint8_t end;
 };
 
+template<typename T>
+void AppendVariableToRawData(T var, RawData& rawData) {
+    std::array<uint8_t, sizeof(T)> byteArray;
+    std::memcpy(byteArray.data(), &var, sizeof(byteArray));
+    rawData.insert(rawData.end(), byteArray.begin(), byteArray.end());
+}
 
 class Packet : public PacketHeader, public PacketBody
 {

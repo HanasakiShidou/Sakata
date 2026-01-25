@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
 project(sakata_test)
 set(CMAKE_CXX_STANDARD 20)
-set(SRC_LIST main_test.cpp sakata.cpp)
+set(SRC_LIST main_test.cpp sakata.cpp packet.cpp)
 add_executable(sakata_test ${SRC_LIST})
