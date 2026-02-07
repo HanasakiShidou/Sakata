@@ -1,3 +1,3 @@
 # Sakata
 
-电子玩具
+Simple rpc code generator.
