@@ -1,0 +1,29 @@
+# rpc_config.yaml
+service: "HelloWorld"
+
+functions:
+  - name: "HelloWorld"
+    return_type: "bool"
+    parameters:
+      - name: "param"
+        type: "int32_t"
+    
+  - name: "addNumbers"
+    return_type: "int32_t"
+    parameters:
+      - name: "a"
+        type: "int32_t"
+      - name: "b"
+        type: "int32_t"
+    
+  - name: "processData"
+    return_type: "void"
+    parameters:
+      - name: "data"
+        type: "uint8_t[32]"  # 固定长度数组
+      - name: "size"
+        type: "uint16_t"
+    
+  - name: "getStatus"
+    return_type: "int64_t"
+    parameters: []
