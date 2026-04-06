@@ -367,11 +367,11 @@ bool {self.service_name}Server::handle_request(const uint8_t* request, int reque
         
         for param in func.parameters:
             if param.is_array:
-                unpack_code.append(f"    {param.type} {param.name}[{param.array_size}];")
-                unpack_code.append(f"    deserialize_array<{param.type}, {param.array_size}>(request, {param.name}, offset);")
+                unpack_code.append(f"            {param.type} {param.name}[{param.array_size}];")
+                unpack_code.append(f"            deserialize_array<{param.type}, {param.array_size}>(request, {param.name}, offset);")
             else:
-                unpack_code.append(f"    {param.type} {param.name};")
-                unpack_code.append(f"    deserialize<{param.type}>(request, {param.name}, offset);")
+                unpack_code.append(f"            {param.type} {param.name};")
+                unpack_code.append(f"            deserialize<{param.type}>(request, {param.name}, offset);")
             
             param_names.append(param.name)
         
@@ -380,25 +380,25 @@ bool {self.service_name}Server::handle_request(const uint8_t* request, int reque
         # 生成函数调用和返回值序列化代码
         if func.return_type != "void":
             param_str = ", ".join(param_names)
-            return_code = f"""    // 调用实际函数
-    {func.return_type} result = {func.name}({param_str});
-    
-    // 序列化返回值
-    offset = 0;
-    serialize<{func.return_type}>(response, result, offset);
-    response_size = offset;"""
+            return_code = f"""            // 调用实际函数
+            {func.return_type} result = {func.name}({param_str});
+            
+            // 序列化返回值
+            offset = 0;
+            serialize<{func.return_type}>(response, result, offset);
+            response_size = offset;"""
         else:
             param_str = ", ".join(param_names)
-            return_code = f"""    // 调用实际函数
-    {func.name}({param_str});
-    response_size = 0;"""
+            return_code = f"""            // 调用实际函数
+            {func.name}({param_str});
+            response_size = 0;"""
         
         return f"""        case 0x{func_id+1:02X}:  // {func.name}
-    {{
+        {{
 {unpack_str}
 {return_code}
-    }}
-            break;"""
+        }}
+        break;"""
     
     def _generate_parameter_list(self, parameters: List[Parameter]) -> str:
         """生成参数列表字符串"""
