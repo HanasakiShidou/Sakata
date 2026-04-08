@@ -73,26 +73,26 @@ class Function:
 
 class RPCGenerator:
     def __init__(self, yaml_file: str, output_dir: str = "."):
-        """初始化RPC生成器
-        
+        """Initialize RPC generator
+
         Args:
-            yaml_file: YAML配置文件路径
-            output_dir: 输出目录，默认为当前目录
+            yaml_file: Path to YAML configuration file
+            output_dir: Output directory, defaults to current directory
         """
         self.yaml_file = yaml_file
         self.output_dir = output_dir
-        
-        # 确保输出目录存在
+
+        # Ensure output directory exists
         os.makedirs(output_dir, exist_ok=True)
-        
-        # 加载配置文件
+
+        # Load configuration file
         with open(yaml_file, 'r') as f:
             self.config = yaml.safe_load(f)
-        
+
         self.service_name = self.config['service']
         self.functions = []
-        
-        # 解析函数定义
+
+        # Parse function definitions
         for func in self.config['functions']:
             params = []
             for param in func.get('parameters', []):
@@ -111,51 +111,51 @@ class RPCGenerator:
                         type=param['type'],
                         is_array=False
                     ))
-            
+
             self.functions.append(Function(
                 name=func['name'],
                 return_type=func['return_type'],
                 parameters=params
             ))
-    
+
     def generate_all_code(self) -> None:
-        """生成所有代码文件"""
+        """Generate all code files"""
         print(f"Generating RPC code from {self.yaml_file}...")
         print(f"Service: {self.service_name}")
         print(f"Functions: {[f.name for f in self.functions]}")
-        
+
         self.generate_client_code()
         self.generate_server_code()
         print(f"Code generated successfully in directory: {self.output_dir}")
-    
+
     def generate_client_code(self) -> None:
-        """生成客户端代码"""
+        """Generate client code"""
         header_content = self._generate_client_header()
         header_path = os.path.join(self.output_dir, f"{self.service_name}Client.h")
         with open(header_path, 'w') as f:
             f.write(header_content)
-        
+
         impl_content = self._generate_client_impl()
         impl_path = os.path.join(self.output_dir, f"{self.service_name}Client.cpp")
         with open(impl_path, 'w') as f:
             f.write(impl_content)
-        
+
         print(f"  Generated client code: {header_path}, {impl_path}")
-    
+
     def generate_server_code(self) -> None:
-        """生成服务器端代码"""
+        """Generate server code"""
         header_content = self._generate_server_header()
         header_path = os.path.join(self.output_dir, f"{self.service_name}Server.h")
         with open(header_path, 'w') as f:
             f.write(header_content)
-        
+
         impl_content = self._generate_server_impl()
         impl_path = os.path.join(self.output_dir, f"{self.service_name}Server.cpp")
         with open(impl_path, 'w') as f:
             f.write(impl_content)
-        
+
         print(f"  Generated server code: {header_path}, {impl_path}")
-    
+
     def _generate_client_header(self) -> str:
         """generate client header"""
         functions_decl = []
@@ -166,12 +166,12 @@ class RPCGenerator:
                     param_list.append(f"{param.type} {param.name}[{param.array_size}]")
                 else:
                     param_list.append(f"{param.type} {param.name}")
-            
+
             param_str = ", ".join(param_list)
             functions_decl.append(f"    {func.return_type} {func.name}({param_str});")
-        
+
         functions_str = "\n".join(functions_decl)
-        
+
         return f"""// Auto-generated RPC Client for {self.service_name}
 #ifndef {self.service_name.upper()}_CLIENT_H
 #define {self.service_name.upper()}_CLIENT_H
@@ -184,9 +184,9 @@ public:
     // I/O operations are passed by the user.
     using SendFunc = bool(*)(const uint8_t*, int);
     using RecvFunc = bool(*)(uint8_t*, int);
-    
+
     {self.service_name}Client(SendFunc send_func, RecvFunc recv_func);
-    
+
     // RPC function declaration
 {functions_str}
 
@@ -198,16 +198,16 @@ private:
 
 #endif // {self.service_name.upper()}_CLIENT_H
 """
-    
+
     def _generate_client_impl(self) -> str:
         """generate client implementation"""
         function_impls = []
         for i, func in enumerate(self.functions):
             func_impl = self._generate_client_function_impl(func, i)
             function_impls.append(func_impl)
-        
+
         functions_str = "\n".join(function_impls)
-        
+
         return f"""// Auto-generated RPC Client Implementation for {self.service_name}
 #include "{self.service_name}Client.h"
 
@@ -219,78 +219,78 @@ private:
 
 {functions_str}
 """
-    
+
     def _generate_client_function_impl(self, func: Function, func_id: int) -> str:
         """generate client implementation for single function"""
-        # 计算参数总大小
-        total_size_expr = "1"  # 函数ID
+        # Calculate total buffer size expression
+        total_size_expr = "1"  # function id
         for param in func.parameters:
             if param.is_array:
                 total_size_expr += f" + sizeof({param.type}) * {param.array_size}"
             else:
                 total_size_expr += f" + sizeof({param.type})"
-        
-        # 返回值大小
+
+        # Return value size expression
         return_size_expr = f"sizeof({func.return_type})" if func.return_type != "void" else "0"
-        
-        # 生成参数序列化代码
+
+        # Generate parameter serialization code
         pack_code = []
         pack_code.append("    offset = 0;")
         pack_code.append("    // first byte is function id")
         pack_code.append(f"    buffer[0] = 0x{func_id+1:02X}; ")
         pack_code.append("    offset = 1;")
         pack_code.append("")
-        
+
         for param in func.parameters:
             if param.is_array:
-                pack_code.append(f"    // 序列化数组 {param.name}")
+                pack_code.append(f"    // Serialize array {param.name}")
                 pack_code.append(f"    serialize_array<{param.type}, {param.array_size}>(buffer, {param.name}, offset);")
             else:
                 pack_code.append(f"    serialize<{param.type}>(buffer, {param.name}, offset);")
-        
+
         pack_str = "\n".join(pack_code)
-        
-        # 生成返回值反序列化代码
+
+        # Generate return value deserialization code
         unpack_code = ""
         if func.return_type != "void":
             unpack_code = f"""
-    // 反序列化返回值
+    // Deserialize return value
     {func.return_type} result;
     offset = 0;
     deserialize<{func.return_type}>(recv_buffer, result, offset);
     return result;"""
         else:
             unpack_code = "    return;"
-        
-        return f"""// {func.name} 函数实现
+
+        return f"""// {func.name} function implementation
 {func.return_type} {self.service_name}Client::{func.name}({self._generate_parameter_list(func.parameters)}) {{
-    // 计算缓冲区大小
+    // Calculate buffer size
     const int total_size = {total_size_expr};
     const int return_size = {return_size_expr};
-    
+
     uint8_t buffer[total_size];
     int offset = 0;
-    
+
 {pack_str}
-    
-    // 发送请求
+
+    // Send request
     if (!send_func_(buffer, total_size)) {{
-        // 发送失败处理
+        // Handle send failure
         return {self._get_default_value(func.return_type)};
     }}
-    
-    // 接收响应
+
+    // Receive response
     uint8_t recv_buffer[return_size];
     if (!recv_func_(recv_buffer, return_size)) {{
-        // 接收失败处理
+        // Handle receive failure
         return {self._get_default_value(func.return_type)};
     }}
 {unpack_code}
 }}
 """
-    
+
     def _generate_server_header(self) -> str:
-        """生成服务器端头文件"""
+        """Generate server header"""
         functions_decl = []
         for func in self.functions:
             param_list = []
@@ -299,12 +299,12 @@ private:
                     param_list.append(f"{param.type} {param.name}[{param.array_size}]")
                 else:
                     param_list.append(f"{param.type} {param.name}")
-            
+
             param_str = ", ".join(param_list)
             functions_decl.append(f"    virtual {func.return_type} {func.name}({param_str}) = 0;")
-        
+
         functions_str = "\n".join(functions_decl)
-        
+
         return f"""// Auto-generated RPC Server for {self.service_name}
 #ifndef {self.service_name.upper()}_SERVER_H
 #define {self.service_name.upper()}_SERVER_H
@@ -315,27 +315,27 @@ private:
 class {self.service_name}Server {{
 public:
     virtual ~{self.service_name}Server() = default;
-    
-    // 纯虚函数，用户需要实现这些函数
+
+    // Pure virtual functions to be implemented by user
 {functions_str}
-    
-    // 处理请求的入口函数
+
+    // Entry point to handle a request
     bool handle_request(const uint8_t* request, int request_size, uint8_t* response, int& response_size);
 
 }};
 
 #endif // {self.service_name.upper()}_SERVER_H
 """
-    
+
     def _generate_server_impl(self) -> str:
-        """生成服务器端实现文件"""
+        """Generate server implementation"""
         case_handlers = []
         for i, func in enumerate(self.functions):
             handler = self._generate_server_case_handler(func, i)
             case_handlers.append(handler)
-        
+
         handlers_str = "\n".join(case_handlers)
-        
+
         return f"""// Auto-generated RPC Server Implementation for {self.service_name}
 #include "{self.service_name}Server.h"
 
@@ -345,26 +345,26 @@ bool {self.service_name}Server::handle_request(const uint8_t* request, int reque
     if (request_size < 1) {{
         return false;
     }}
-    
+
     uint8_t func_id = request[0];
     int offset = 1;
-    
+
     switch (func_id) {{
 {handlers_str}
         default:
             return false;
     }}
-    
+
     return true;
 }}
 """
-    
+
     def _generate_server_case_handler(self, func: Function, func_id: int) -> str:
-        """生成服务器端case处理函数"""
-        # 生成参数反序列化代码
+        """Generate server case handler"""
+        # Generate parameter deserialization code
         unpack_code = []
         param_names = []
-        
+
         for param in func.parameters:
             if param.is_array:
                 unpack_code.append(f"            {param.type} {param.name}[{param.array_size}];")
@@ -372,47 +372,47 @@ bool {self.service_name}Server::handle_request(const uint8_t* request, int reque
             else:
                 unpack_code.append(f"            {param.type} {param.name};")
                 unpack_code.append(f"            deserialize<{param.type}>(request, {param.name}, offset);")
-            
+
             param_names.append(param.name)
-        
+
         unpack_str = "\n".join(unpack_code)
-        
-        # 生成函数调用和返回值序列化代码
+
+        # Generate function call and return value serialization code
         if func.return_type != "void":
             param_str = ", ".join(param_names)
-            return_code = f"""            // 调用实际函数
+            return_code = f"""            // Call actual function
             {func.return_type} result = {func.name}({param_str});
-            
-            // 序列化返回值
+
+            // Serialize return value
             offset = 0;
             serialize<{func.return_type}>(response, result, offset);
             response_size = offset;"""
         else:
             param_str = ", ".join(param_names)
-            return_code = f"""            // 调用实际函数
+            return_code = f"""            // Call actual function
             {func.name}({param_str});
             response_size = 0;"""
-        
+
         return f"""        case 0x{func_id+1:02X}:  // {func.name}
         {{
 {unpack_str}
 {return_code}
         }}
         break;"""
-    
+
     def _generate_parameter_list(self, parameters: List[Parameter]) -> str:
-        """生成参数列表字符串"""
+        """Generate parameter list string"""
         param_strs = []
         for param in parameters:
             if param.is_array:
                 param_strs.append(f"{param.type} {param.name}[{param.array_size}]")
             else:
                 param_strs.append(f"{param.type} {param.name}")
-        
+
         return ", ".join(param_strs)
-    
+
     def _get_default_value(self, type_str: str) -> str:
-        """获取默认值"""
+        """Get default value"""
         default_map = {
             'int8_t': '0', 'uint8_t': '0',
             'int16_t': '0', 'uint16_t': '0',
@@ -424,7 +424,7 @@ bool {self.service_name}Server::handle_request(const uint8_t* request, int reque
         return default_map.get(type_str, '0')
 
 def parse_arguments():
-    """解析命令行参数"""
+    """Parse command line arguments"""
     parser = argparse.ArgumentParser(
         description="Generate RPC client and server code from YAML configuration.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -435,59 +435,59 @@ Examples:
   %(prog)s --input rpc.yaml --output src/generated --verbose
         """
     )
-    
-    # 必需参数：输入YAML文件
+
+    # Required argument: input YAML file
     parser.add_argument(
         "-i", "--input",
         required=True,
         help="Input YAML configuration file (required)"
     )
-    
-    # 可选参数：输出目录
+
+    # Optional argument: output directory
     parser.add_argument(
         "-o", "--output",
         default=".",
         help="Output directory for generated files (default: current directory)"
     )
-    
-    # 可选参数：详细模式
+
+    # Optional argument: verbose mode
     parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose output"
     )
-    
-    # 可选参数：只生成客户端或服务器端
+
+    # Optional argument: generate only client or server
     parser.add_argument(
         "--client-only",
         action="store_true",
         help="Generate only client code"
     )
-    
+
     parser.add_argument(
         "--server-only",
         action="store_true",
         help="Generate only server code"
     )
-    
-    # 可选参数：覆盖现有文件
+
+    # Optional argument: overwrite existing files
     parser.add_argument(
         "--force",
         action="store_true",
         help="Overwrite existing files without confirmation"
     )
-    
+
     return parser.parse_args()
 
 def validate_yaml_file(yaml_file: str) -> bool:
-    """验证YAML文件是否存在且格式正确"""
+    """Validate that YAML file exists and has correct format"""
     if not os.path.exists(yaml_file):
         print(f"Error: YAML file '{yaml_file}' does not exist.")
         return False
-    
+
     if not yaml_file.endswith(('.yaml', '.yml')):
         print(f"Warning: File '{yaml_file}' does not have .yaml or .yml extension.")
-    
+
     try:
         with open(yaml_file, 'r') as f:
             yaml.safe_load(f)
@@ -500,18 +500,18 @@ def validate_yaml_file(yaml_file: str) -> bool:
         return False
 
 def main():
-    """主函数"""
-    # 解析命令行参数
+    """Main function"""
+    # Parse command line arguments
     args = parse_arguments()
-    
-    # 验证YAML文件
+
+    # Validate YAML file
     if not validate_yaml_file(args.input):
         sys.exit(1)
-    
-    # 创建生成器实例
+
+    # Create generator instance
     generator = RPCGenerator(args.input, args.output)
-    
-    # 根据选项生成代码
+
+    # Generate code according to options
     if args.client_only:
         if args.verbose:
             print(f"Generating only client code for service: {generator.service_name}")
@@ -521,11 +521,11 @@ def main():
             print(f"Generating only server code for service: {generator.service_name}")
         generator.generate_server_code()
     else:
-        # 生成所有代码
+        # Generate all code
         if args.verbose:
             print(f"Generating both client and server code for service: {generator.service_name}")
         generator.generate_all_code()
-    
+
     if args.verbose:
         print("Code generation completed successfully!")
 
